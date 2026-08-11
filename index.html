@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>マンガ切り抜き → SNS合成</title>
+<style>
+  :root{
+    --bg:#14161a; --panel:#1c1f26; --panel2:#232733; --line:#333947;
+    --fg:#e8eaf0; --muted:#9aa3b2; --accent:#4c8dff; --accent2:#ffb020;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.6 -apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;overflow:hidden}
+  header{padding:8px 14px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  header h1{font-size:14px;margin:0;font-weight:600}
+  .hint{color:var(--muted);font-size:12px}
+  .sp{flex:1}
+
+  .wrap{display:flex;height:calc(100vh - 45px);min-height:0}
+  .col{display:flex;flex-direction:column;min-width:0;min-height:0}
+  #colPages{flex:1 1 50%;border-right:1px solid var(--line)}
+  #colRight{flex:1 1 50%}
+  .colhead{padding:6px 12px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:8px;background:var(--panel);font-size:12px;color:var(--muted);flex-wrap:wrap}
+  .colbody{flex:1;overflow:auto;padding:12px}
+
+  button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer;font-size:12px;white-space:nowrap}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.warn{color:#ff9a9a}
+  button.mini{padding:2px 7px;font-size:11px}
+  button.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  button[disabled]{opacity:.35;cursor:default}
+  button[disabled]:hover{border-color:var(--line)}
+  input[type=number],input[type=text],select{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px}
+  input[type=color]{background:none;border:1px solid var(--line);border-radius:6px;width:32px;height:24px;padding:1px}
+
+  .drop{border:2px dashed var(--line);border-radius:12px;padding:24px 16px;text-align:center;color:var(--muted);cursor:pointer;
+        min-height:calc(100vh - 130px);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+  .drop.over{border-color:var(--accent);color:var(--fg);background:#1a2233}
+
+  /* ---- ページ ---- */
+  .page{margin-bottom:18px}
+  .page .cap{font-size:12px;color:var(--muted);margin-bottom:4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .pwrap{position:relative;display:inline-block;line-height:0;background:#fff;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .pwrap img{display:block;width:100%;height:auto;-webkit-user-drag:none;user-select:none}
+  .pov{position:absolute;inset:0;cursor:crosshair}
+  .mark{position:absolute;border:2px solid var(--accent2);background:rgba(255,176,32,.14);pointer-events:none}
+  .mark.on{border-color:#4c8dff;background:rgba(76,141,255,.16);pointer-events:auto;cursor:move}
+  .mark b{position:absolute;top:-1px;left:-1px;background:var(--accent2);color:#000;font-size:11px;font-weight:700;padding:0 5px;line-height:17px;pointer-events:auto;cursor:pointer}
+  .mark.on b{background:#4c8dff;color:#fff}
+  .mark .del{position:absolute;top:-1px;right:-1px;background:#ff5c5c;color:#fff;font-size:11px;line-height:17px;padding:0 5px;pointer-events:auto;cursor:pointer;display:none}
+  .mark.on .del{display:block}
+  .mark .mh{position:absolute;width:11px;height:11px;background:#4c8dff;border:2px solid #fff;border-radius:2px;display:none;pointer-events:auto}
+  .mark.on .mh{display:block}
+  .band{position:absolute;border:2px dashed var(--accent);background:rgba(76,141,255,.18);pointer-events:none}
+
+  /* ---- クリップ置き場 ---- */
+  #tray{display:flex;gap:6px;overflow-x:auto;padding:8px;background:var(--panel);border-bottom:1px solid var(--line);min-height:88px;align-items:center}
+  .clip{position:relative;flex:0 0 auto;height:70px;background:#0f1116;border:1px solid var(--line);border-radius:6px;display:flex;align-items:center;justify-content:center;cursor:grab;padding:2px}
+  .clip.on{border-color:var(--accent);box-shadow:0 0 0 2px rgba(76,141,255,.5)}
+  .clip img{max-height:66px;max-width:130px;display:block;pointer-events:none}
+  .clip .n{position:absolute;bottom:0;left:2px;font-size:10px;color:var(--muted)}
+
+  /* ---- ボード ---- */
+  .board{margin-bottom:20px}
+  .bhead{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px;font-size:12px;color:var(--muted)}
+  .stage{position:relative;background:#fff;border:1px solid var(--line);box-shadow:0 3px 14px rgba(0,0,0,.4);overflow:hidden}
+  .stage.over{outline:2px solid var(--accent);outline-offset:2px}
+  .stage.draw{cursor:crosshair}
+  .item{position:absolute}
+  .item img{width:100%;height:100%;display:block;pointer-events:none;-webkit-user-drag:none}
+  .item svg{position:absolute;inset:0;overflow:visible;pointer-events:none}
+  .item.sel{outline:2px solid var(--accent)}
+  .item .h{position:absolute;width:13px;height:13px;background:var(--accent);border:2px solid #fff;border-radius:50%;display:none}
+  .item.sel .h{display:block}
+  .item .h.br{right:-7px;bottom:-7px;cursor:nwse-resize}
+  .item .h.tl{left:-7px;top:-7px;cursor:nwse-resize}
+  .item .h.tr{right:-7px;top:-7px;cursor:nesw-resize}
+  .item .h.bl{left:-7px;bottom:-7px;cursor:nesw-resize}
+  .item .num{position:absolute;top:2px;left:3px;font-size:12px;font-weight:700;color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 4px;pointer-events:none}
+  .guide{position:absolute;background:#ff4d8d;z-index:9998;pointer-events:none}
+  .preview{position:absolute;z-index:9999;pointer-events:none}
+  .preview svg{position:absolute;inset:0;overflow:visible}
+  .empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#c7cbd4;font-size:13px;pointer-events:none}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>マンガ切り抜き → SNS合成</h1>
+  <span class="hint">画像はブラウザ内だけで処理されます（アップロードなし）</span>
+  <span class="sp"></span>
+  <button id="btnUndo" title="⌘Z">↩ 戻る</button>
+  <button id="btnRedo" title="⌘⇧Z">↪ やり直し</button>
+  <button id="btnAdd">画像を追加</button>
+  <button id="btnClearAll" class="warn">全消去</button>
+  <input type="file" id="file" accept="image/*" multiple hidden>
+</header>
+
+<div class="wrap">
+  <!-- 左：ページ一覧 -->
+  <div class="col" id="colPages">
+    <div class="colhead">
+      <strong style="color:var(--fg)">① ページを読む・コマを囲う</strong>
+      <span>ドラッグで囲うとクリップに／番号をクリックで選ぶと範囲を微調整できます</span>
+      <span class="sp"></span>
+      <span>表示倍率</span><input type="range" id="zoom" min="20" max="220" value="100" style="width:110px">
+      <span id="zoomV">100%</span>
+    </div>
+    <div class="colbody" id="pagesBody">
+      <div class="drop" id="drop">ここにマンガのページ画像をドロップ<br><span style="font-size:12px">PNG / JPEG、複数枚まとめてOK（ファイル名順）</span></div>
+      <div id="pages"></div>
+    </div>
+  </div>
+
+  <!-- 右：クリップ＋ボード -->
+  <div class="col" id="colRight">
+    <div class="colhead">
+      <strong style="color:var(--fg)">② クリップ置き場</strong>
+      <span>ボードへドラッグ／クリックで選択（⌘・Shiftで複数）</span>
+      <span class="sp"></span>
+      <button id="btnClipDel" class="mini warn">選択したクリップを削除</button>
+      <button id="btnClipClear" class="mini warn">全消去</button>
+    </div>
+    <div id="tray"></div>
+
+    <div class="colhead">
+      <strong style="color:var(--fg)">③ ボードに配置</strong>
+      <select id="newRatio">
+        <option value="1080x1350">4:5 縦（X/インスタで最大・推奨）</option>
+        <option value="1080x1080">1:1 スクエア</option>
+        <option value="1200x1600">3:4 縦</option>
+        <option value="1080x1920">9:16 ストーリー/リール</option>
+        <option value="1600x900">16:9 横</option>
+        <option value="1200x675">16:9 X横長</option>
+        <option value="custom">カスタム…</option>
+      </select>
+      <button id="btnAddBoard">ボードを追加</button>
+      <span class="sp"></span>
+      <span>表示倍率</span><input type="range" id="bzoom" min="20" max="220" value="100" style="width:100px">
+      <span id="bzoomV">100%</span>
+    </div>
+    <div class="colhead" style="border-top:none">
+      <span>ツール</span>
+      <button class="mini on" data-tool="select">選択</button>
+      <button class="mini" data-tool="rect">四角</button>
+      <button class="mini" data-tool="line">線</button>
+      <button class="mini" data-tool="brush">ブラシ</button>
+      <button class="mini" data-tool="erase">消しゴム</button>
+      <button class="mini" data-tool="bucket">バケツ</button>
+      <input type="color" id="shColor" value="#000000" title="ブラシ・バケツの色">
+      <span>太さ</span><input type="number" id="shWidth" value="6" min="1" max="80" style="width:52px">
+      <span id="bucketOpts" style="display:none;gap:6px;align-items:center">
+        <span>色の許容</span><input type="range" id="bkTol" min="4" max="140" value="40" style="width:80px">
+        <span>隙間を閉じる</span><select id="bkGap" style="padding:2px 4px">
+          <option value="0">なし</option><option value="2" selected>弱</option><option value="4">中</option>
+          <option value="6">強</option><option value="10">最強</option></select>
+      </span>
+      <span class="sp"></span>
+      <label style="display:flex;align-items:center;gap:4px"><input type="checkbox" id="showNum"> 番号を表示</label>
+      <span>ファイル名</span><input type="text" id="fileName" value="manga" style="width:110px"
+             title="保存ダイアログに最初から入る名前です。保存時に変更できます">
+      <span style="color:var(--muted)">.jpg</span>
+      <button id="btnExportAll" class="primary mini">全ボードを書き出し</button>
+    </div>
+    <div class="colhead" style="border-top:none;padding-top:0">
+      <span>コマ／図形：ドラッグで移動・角の●で拡大縮小・⌘+角ドラッグでその角だけ動かして斜めゴマに（角をダブルクリックで戻す）・Option+ホイールか +− で拡大縮小・ダブルクリックで幅いっぱい・Delete で削除・[ ] で重なり順／四角・線は他のコマの辺に自動スナップ（ピンクの線）、Shift で水平垂直（正方形）に固定／バケツは塗りたい場所をクリック（漏れるときは「隙間を閉じる」を強く）</span>
+    </div>
+    <div class="colbody" id="boards"></div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+let uid = 1;
+const state = {
+  pages: [], clips: [], boards: [],
+  sel: null,               // ボード上の選択 {bid,iid}
+  selClips: new Set(),     // クリップ置き場／ページ上の選択
+  tool: 'select'
+};
+
+/* ============ 取り消し履歴（⌘Z / ⌘⇧Z） ============
+   ページ・クリップ・ボードの中身をまとめて記録する。画像そのものは
+   参照を持ち回るだけなのでメモリは増えない。                        */
+const HIST={undo:[],redo:[],max:60};
+const snapState=()=>({
+  pages: state.pages.slice(),
+  clips: state.clips.map(c=>({...c})),
+  boards: state.boards.map(b=>({...b, items:b.items.map(i=>({...i}))}))
+});
+function applyState(s){
+  state.pages=s.pages.slice();
+  state.clips=s.clips.map(c=>({...c}));
+  state.boards=s.boards.map(b=>({...b, items:b.items.map(i=>({...i}))}));
+  state.sel=null; state.selClips.clear();
+}
+function pushHistory(){
+  HIST.undo.push(snapState());
+  if(HIST.undo.length>HIST.max) HIST.undo.shift();
+  HIST.redo.length=0; updateHistUI();
+}
+function undo(){ if(!HIST.undo.length) return;
+  HIST.redo.push(snapState()); applyState(HIST.undo.pop()); renderAll(); updateHistUI(); }
+function redo(){ if(!HIST.redo.length) return;
+  HIST.undo.push(snapState()); applyState(HIST.redo.pop()); renderAll(); updateHistUI(); }
+function updateHistUI(){
+  $('#btnUndo').disabled=!HIST.undo.length;
+  $('#btnRedo').disabled=!HIST.redo.length;
+}
+$('#btnUndo').onclick=undo;
+$('#btnRedo').onclick=redo;
+document.addEventListener('keydown',e=>{
+  if(!(e.metaKey||e.ctrlKey)) return;
+  if(e.key!=='z'&&e.key!=='Z') return;
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  e.preventDefault(); e.shiftKey?redo():undo();
+}, true);
+
+/* ============ 読み込み ============ */
+const drop = $('#drop');
+/* 左カラム全体をドロップ先にする（ページ読み込み後も、余白どこでも受け付ける） */
+const dropZone = $('#pagesBody');
+['dragenter','dragover'].forEach(e=>dropZone.addEventListener(e,ev=>{ev.preventDefault();drop.classList.add('over')}));
+['dragleave','drop'].forEach(e=>dropZone.addEventListener(e,ev=>{ev.preventDefault();drop.classList.remove('over')}));
+dropZone.addEventListener('drop', ev=>addFiles(ev.dataTransfer.files));
+drop.addEventListener('click', ()=>$('#file').click());
+$('#btnAdd').onclick = ()=>$('#file').click();
+$('#file').onchange = e=>{ addFiles(e.target.files); e.target.value=''; };
+window.addEventListener('dragover',e=>e.preventDefault());
+window.addEventListener('drop',e=>{ if(!e.target.closest('#drop')) e.preventDefault(); });
+
+async function addFiles(list){
+  const files=[...list].filter(f=>/^image\//.test(f.type))
+    .sort((a,b)=>a.name.localeCompare(b.name,'ja',{numeric:true}));
+  if(files.length) pushHistory();
+  for(const f of files){
+    const url=URL.createObjectURL(f);
+    const img=await new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=url;});
+    state.pages.push({id:uid++, name:f.name, img, url});
+  }
+  renderPages();
+}
+$('#btnClearAll').onclick=()=>{ if(!confirm('画像・クリップ・ボードの中身を全部消します。よろしいですか？')) return;
+  pushHistory();
+  state.pages=[]; state.clips=[]; state.boards.forEach(b=>b.items=[]); state.sel=null; state.selClips.clear(); renderAll(); };
+
+/* ============ ページ表示 ============ */
+$('#zoom').oninput=()=>{ $('#zoomV').textContent=$('#zoom').value+'%'; applyZoom(); };
+function applyZoom(){
+  const z=+$('#zoom').value/100, avail=$('#pagesBody').clientWidth-26;
+  document.querySelectorAll('.pwrap').forEach(w=>{ w.style.width=Math.max(60, avail*z)+'px'; });
+  drawMarks();
+}
+function renderPages(){
+  const host=$('#pages'); host.innerHTML='';
+  $('#drop').style.display=state.pages.length?'none':'';   // '' でCSSのflex（中央寄せ）が効く
+  state.pages.forEach((p,pi)=>{
+    const box=document.createElement('div'); box.className='page';
+    const cap=document.createElement('div'); cap.className='cap';
+    cap.innerHTML=`<span>${pi+1}. ${esc(p.name)}（${p.img.width}×${p.img.height}）</span>`;
+    const bWhole=document.createElement('button'); bWhole.className='mini'; bWhole.textContent='ページ全体をクリップ';
+    bWhole.onclick=()=>{ pushHistory(); addClip(p,0,0,p.img.width,p.img.height); };
+    const bTrim=document.createElement('button'); bTrim.className='mini'; bTrim.textContent='余白を除いて全体';
+    bTrim.onclick=()=>{ pushHistory(); const r=contentBox(p.img); addClip(p,r.x,r.y,r.w,r.h); };
+    const del=document.createElement('button'); del.className='mini warn'; del.textContent='このページを削除';
+    del.onclick=()=>{ pushHistory(); state.pages.splice(pi,1); state.clips.filter(c=>c.pageId===p.id).forEach(c=>removeClip(c.id,true));
+      state.clips=state.clips.filter(c=>c.pageId!==p.id); renderAll(); };
+    cap.append(bWhole,bTrim,del);
+    const wrap=document.createElement('div'); wrap.className='pwrap'; wrap.dataset.pid=p.id;
+    const img=document.createElement('img'); img.src=p.url; img.draggable=false;
+    const ov=document.createElement('div'); ov.className='pov';
+    wrap.append(img,ov); box.append(cap,wrap); host.appendChild(box);
+    bindSelect(p, wrap, ov);
+  });
+  applyZoom();
+}
+/* 余白を除いた領域（白フチだけ落とす簡易トリム） */
+function contentBox(img){
+  const s=Math.min(1,900/Math.max(img.width,img.height));
+  const w=Math.round(img.width*s), h=Math.round(img.height*s);
+  const c=document.createElement('canvas'); c.width=w; c.height=h;
+  const x=c.getContext('2d',{willReadFrequently:true}); x.drawImage(img,0,0,w,h);
+  const d=x.getImageData(0,0,w,h).data;
+  const ink=(px,py)=>{ const i=(py*w+px)*4; return (d[i]*.299+d[i+1]*.587+d[i+2]*.114) < 235; };
+  let x0=0,y0=0,x1=w,y1=h, f;
+  f=y=>{ for(let px=0;px<w;px++) if(ink(px,y)) return true; return false; };
+  while(y0<y1 && !f(y0)) y0++;  while(y1>y0 && !f(y1-1)) y1--;
+  f=x2=>{ for(let py=y0;py<y1;py++) if(ink(x2,py)) return true; return false; };
+  while(x0<x1 && !f(x0)) x0++;  while(x1>x0 && !f(x1-1)) x1--;
+  if(x1<=x0||y1<=y0) return {x:0,y:0,w:img.width,h:img.height};
+  const pad=2/s;
+  return { x:Math.max(0,Math.round(x0/s-pad)), y:Math.max(0,Math.round(y0/s-pad)),
+           w:Math.min(img.width, Math.round((x1-x0)/s+pad*2)), h:Math.min(img.height, Math.round((y1-y0)/s+pad*2)) };
+}
+
+/* ---- 新規の範囲選択 ---- */
+function bindSelect(page, wrap, ov){
+  ov.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    const r=wrap.getBoundingClientRect(); const x0=e.clientX-r.left, y0=e.clientY-r.top;
+    const band=document.createElement('div'); band.className='band'; wrap.appendChild(band);
+    ov.setPointerCapture(e.pointerId);
+    const move=ev=>{
+      const x=clamp(ev.clientX-r.left,0,r.width), y=clamp(ev.clientY-r.top,0,r.height);
+      band.style.left=Math.min(x,x0)+'px'; band.style.top=Math.min(y,y0)+'px';
+      band.style.width=Math.abs(x-x0)+'px'; band.style.height=Math.abs(y-y0)+'px';
+    };
+    const up=ev=>{
+      ov.removeEventListener('pointermove',move); ov.removeEventListener('pointerup',up);
+      const x=clamp(ev.clientX-r.left,0,r.width), y=clamp(ev.clientY-r.top,0,r.height);
+      const L=Math.min(x,x0),T=Math.min(y,y0),W=Math.abs(x-x0),H=Math.abs(y-y0);
+      band.remove();
+      if(W<12||H<12){ state.selClips.clear(); renderTray(); drawMarks(); return; }  // 空クリックは選択解除
+      pushHistory();
+      const k=page.img.width/r.width;
+      addClip(page, Math.round(L*k), Math.round(T*k), Math.round(W*k), Math.round(H*k));
+    };
+    ov.addEventListener('pointermove',move); ov.addEventListener('pointerup',up);
+  });
+}
+
+/* ============ クリップ ============ */
+function makeThumb(page,sx,sy,sw,sh){
+  const max=320, s=Math.min(1,max/Math.max(sw,sh));
+  const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(sw*s)); c.height=Math.max(1,Math.round(sh*s));
+  c.getContext('2d').drawImage(page.img,sx,sy,sw,sh,0,0,c.width,c.height);
+  return c.toDataURL('image/jpeg',0.85);
+}
+function addClip(page,sx,sy,sw,sh){
+  const c={id:uid++, pageId:page.id, sx,sy,sw,sh, thumb:makeThumb(page,sx,sy,sw,sh)};
+  state.clips.push(c); state.selClips.clear(); state.selClips.add(c.id);
+  renderTray(); drawMarks(); return c;
+}
+function removeClip(id, keepArray){
+  state.boards.forEach(b=>{ b.items=b.items.filter(i=>!(i.type==='clip'&&i.clipId===id)); });
+  state.selClips.delete(id);
+  if(!keepArray) state.clips=state.clips.filter(c=>c.id!==id);
+}
+const clipById=id=>state.clips.find(c=>c.id===id);
+const pageById=id=>state.pages.find(p=>p.id===id);
+
+$('#btnClipDel').onclick=()=>{
+  if(!state.selClips.size){ alert('削除するクリップを選んでください（クリップをクリック、⌘/Shiftで複数選択）'); return; }
+  const used=[...state.selClips].reduce((n,id)=>n+state.boards.reduce((m,b)=>m+b.items.filter(i=>i.type==='clip'&&i.clipId===id).length,0),0);
+  if(used && !confirm(`ボードに配置済みの ${used} コマも一緒に消えます。よろしいですか？`)) return;
+  pushHistory();
+  [...state.selClips].forEach(id=>removeClip(id));
+  renderAll();
+};
+$('#btnClipClear').onclick=()=>{ if(!state.clips.length) return;
+  if(!confirm('クリップを全部消します（ボードに配置済みのコマも消えます）')) return;
+  pushHistory();
+  state.clips.slice().forEach(c=>removeClip(c.id)); renderAll(); };
+
+/* ---- クリップ置き場 ---- */
+function renderTray(){
+  const t=$('#tray'); t.innerHTML='';
+  if(!state.clips.length){ t.innerHTML='<span class="hint" style="padding:0 6px">まだクリップがありません。左のページをドラッグして囲うか、「ページ全体をクリップ」を押してください。</span>'; return; }
+  state.clips.forEach((c,i)=>{
+    const el=document.createElement('div'); el.className='clip'+(state.selClips.has(c.id)?' on':'');
+    el.innerHTML=`<img src="${c.thumb}"><span class="n">${i+1}</span>`;
+    el.addEventListener('pointerdown',ev=>{ if(ev.button===0) startClipDrag(ev,c); });
+    t.appendChild(el);
+  });
+}
+function selectClip(c,additive){
+  if(additive){ state.selClips.has(c.id)?state.selClips.delete(c.id):state.selClips.add(c.id); }
+  else { state.selClips.clear(); state.selClips.add(c.id); }
+  renderTray(); drawMarks();
+  const m=document.querySelector(`.mark[data-cid="${c.id}"]`);
+  if(m) m.scrollIntoView({block:'nearest',behavior:'smooth'});
+}
+/* クリップをボードへドラッグ（ポインタ実装＝タッチでも動く）。動かさなければ「選択」 */
+function startClipDrag(e,c){
+  e.preventDefault();
+  const sx=e.clientX, sy=e.clientY; let moved=false, ghost=null, hot=null;
+  const move=ev=>{
+    if(!moved && Math.hypot(ev.clientX-sx,ev.clientY-sy)<5) return;
+    if(!moved){
+      moved=true;
+      ghost=document.createElement('img'); ghost.src=c.thumb;
+      ghost.style.cssText='position:fixed;z-index:999;pointer-events:none;opacity:.85;max-width:150px;max-height:150px;box-shadow:0 6px 20px rgba(0,0,0,.6);transform:translate(-50%,-50%)';
+      document.body.appendChild(ghost);
+    }
+    ghost.style.left=ev.clientX+'px'; ghost.style.top=ev.clientY+'px';
+    ghost.style.display='none';
+    const el=document.elementFromPoint(ev.clientX,ev.clientY);
+    ghost.style.display='';
+    const st=el&&el.closest('.stage');
+    if(st!==hot){ if(hot) hot.classList.remove('over'); hot=st; if(hot) hot.classList.add('over'); }
+  };
+  const up=ev=>{
+    document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
+    if(ghost) ghost.remove();
+    if(hot) hot.classList.remove('over');
+    if(!moved){ selectClip(c, ev.metaKey||ev.ctrlKey||ev.shiftKey); return; }
+    if(!hot) return;
+    const b=state.boards.find(x=>x.id===+hot.dataset.bid); if(!b) return;
+    const r=hot.getBoundingClientRect(), s=r.width/b.w;
+    const cx=(ev.clientX-r.left)/s, cy=(ev.clientY-r.top)/s;
+    pushHistory();
+    const k=Math.min(b.w*0.6/c.sw, b.h*0.6/c.sh), w=c.sw*k, h=c.sh*k;
+    const it={id:uid++, type:'clip', clipId:c.id, x:Math.round(clamp(cx-w/2,0,Math.max(0,b.w-w))),
+              y:Math.round(clamp(cy-h/2,0,Math.max(0,b.h-h))), w:Math.round(w), h:Math.round(h)};
+    b.items.push(it); state.sel={bid:b.id,iid:it.id}; renderBoards();
+  };
+  document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+}
+
+/* ---- ページ上のクリップ枠（選択＋微調整） ---- */
+const HANDLES=[['tl',0,0],['t',.5,0],['tr',1,0],['r',1,.5],['br',1,1],['b',.5,1],['bl',0,1],['l',0,.5]];
+function drawMarks(){
+  document.querySelectorAll('.pwrap').forEach(wrap=>{
+    wrap.querySelectorAll('.mark').forEach(m=>m.remove());
+    const pid=+wrap.dataset.pid, page=pageById(pid); if(!page) return;
+    const r=wrap.getBoundingClientRect(); const k=r.width/page.img.width;
+    state.clips.forEach((c,i)=>{ if(c.pageId!==pid) return;
+      const on=state.selClips.has(c.id);
+      const m=document.createElement('div'); m.className='mark'+(on?' on':''); m.dataset.cid=c.id;
+      m.style.left=c.sx*k+'px'; m.style.top=c.sy*k+'px'; m.style.width=c.sw*k+'px'; m.style.height=c.sh*k+'px';
+      m.innerHTML=`<b>${i+1}</b><span class="del">×</span>`
+        + (on?HANDLES.map(([h,fx,fy])=>`<span class="mh" data-h="${h}" style="left:calc(${fx*100}% - 6px);top:calc(${fy*100}% - 6px)"></span>`).join(''):'');
+      m.querySelector('b').addEventListener('pointerdown',ev=>{ ev.stopPropagation(); ev.preventDefault();
+        selectClip(c, ev.metaKey||ev.ctrlKey||ev.shiftKey); });
+      m.querySelector('.del').addEventListener('pointerdown',ev=>{ ev.stopPropagation(); ev.preventDefault();
+        if(state.boards.some(b=>b.items.some(i2=>i2.type==='clip'&&i2.clipId===c.id))
+           && !confirm('ボードに配置済みのコマも消えます。よろしいですか？')) return;
+        pushHistory(); removeClip(c.id); renderAll(); });
+      if(on) bindMark(m, c, page, wrap);
+      wrap.appendChild(m);
+    });
+  });
+}
+function bindMark(m, c, page, wrap){
+  m.addEventListener('pointerdown', e=>{
+    if(e.button!==0) return;
+    e.stopPropagation(); e.preventDefault();
+    const handle=e.target.dataset.h;
+    const r=wrap.getBoundingClientRect(), k=page.img.width/r.width;
+    const sx=e.clientX, sy=e.clientY, o={x:c.sx,y:c.sy,w:c.sw,h:c.sh};
+    m.setPointerCapture(e.pointerId);
+    let pushed=false;
+    const move=ev=>{
+      if(!pushed){ pushHistory(); pushed=true; }   // 実際に動かしたときだけ履歴に積む
+      const dx=(ev.clientX-sx)*k, dy=(ev.clientY-sy)*k;
+      let n = handle ? applyHandle(o,handle,dx,dy,16) : {x:o.x+dx, y:o.y+dy, w:o.w, h:o.h};
+      n.x=clamp(n.x,0,page.img.width-n.w); n.y=clamp(n.y,0,page.img.height-n.h);
+      n.w=Math.min(n.w,page.img.width-n.x); n.h=Math.min(n.h,page.img.height-n.y);
+      c.sx=Math.round(n.x); c.sy=Math.round(n.y); c.sw=Math.round(n.w); c.sh=Math.round(n.h);
+      const s=r.width/page.img.width;
+      m.style.left=c.sx*s+'px'; m.style.top=c.sy*s+'px'; m.style.width=c.sw*s+'px'; m.style.height=c.sh*s+'px';
+    };
+    const up=()=>{
+      m.removeEventListener('pointermove',move); m.removeEventListener('pointerup',up);
+      c.thumb=makeThumb(page,c.sx,c.sy,c.sw,c.sh);
+      // 配置済みのコマは幅を保ったまま新しい縦横比に合わせる
+      state.boards.forEach(b=>b.items.forEach(it=>{ if(it.type==='clip'&&it.clipId===c.id) it.h=Math.round(it.w*c.sh/c.sw); }));
+      renderTray(); renderBoards(); drawMarks();
+    };
+    m.addEventListener('pointermove',move); m.addEventListener('pointerup',up);
+  });
+}
+function applyHandle(o,h,dx,dy,min){
+  let x=o.x,y=o.y,w=o.w,ht=o.h;
+  if(h.includes('l')){ x=o.x+dx; w=o.w-dx; }
+  if(h.includes('r')){ w=o.w+dx; }
+  if(h.includes('t')){ y=o.y+dy; ht=o.h-dy; }
+  if(h.includes('b')){ ht=o.h+dy; }
+  if(w<min){ if(h.includes('l')) x=o.x+o.w-min; w=min; }
+  if(ht<min){ if(h.includes('t')) y=o.y+o.h-min; ht=min; }
+  return {x,y,w,h:ht};
+}
+window.addEventListener('resize',()=>{ applyZoom(); renderBoards(); });
+
+/* ============ ボード ============ */
+$('#btnAddBoard').onclick=()=>{
+  let v=$('#newRatio').value, w,h;
+  if(v==='custom'){
+    const s=prompt('サイズを 幅x高さ で入力（例: 1080x1350）','1080x1350'); if(!s) return;
+    const m=/^\s*(\d+)\s*[x×*]\s*(\d+)\s*$/.exec(s); if(!m){ alert('形式が違います'); return; }
+    w=+m[1]; h=+m[2];
+  } else { [w,h]=v.split('x').map(Number); }
+  pushHistory();
+  state.boards.push({id:uid++, w, h, bg:'#ffffff', items:[]});
+  renderBoards();
+};
+function setTool(t){
+  state.tool=t;
+  document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x.dataset.tool===t));
+  document.querySelectorAll('.stage').forEach(s=>s.classList.toggle('draw',t!=='select'));
+  $('#bucketOpts').style.display = t==='bucket' ? 'inline-flex' : 'none';
+}
+document.querySelectorAll('[data-tool]').forEach(b=>b.onclick=()=>setTool(b.dataset.tool));
+$('#bzoom').oninput=()=>{ $('#bzoomV').textContent=$('#bzoom').value+'%'; renderBoards(); };
+$('#showNum').onchange=renderBoards;
+['shColor','shWidth'].forEach(id=>$('#'+id).addEventListener('pointerdown',()=>{
+  if(!state.sel) return;
+  const b=state.boards.find(x=>x.id===state.sel.bid); if(!b) return;
+  const it=b.items.find(i=>i.id===state.sel.iid);
+  if(it&&(it.type==='brush'||it.type==='line'||it.type==='rect')) pushHistory();
+}));
+['shColor','shWidth'].forEach(id=>$('#'+id).addEventListener('input',()=>{
+  if(!state.sel) return;
+  const b=state.boards.find(x=>x.id===state.sel.bid); if(!b) return;
+  const it=b.items.find(i=>i.id===state.sel.iid);
+  if(it&&(it.type==='brush'||it.type==='line'||it.type==='rect')){
+    it.color=$('#shColor').value; it.lw=+$('#shWidth').value; renderBoards(); }
+}));
+
+function ratioLabel(w,h){ const g=(a,b)=>b?g(b,a%b):a; const d=g(w,h); return `${w/d}:${h/d}`; }
+function boardDisplayWidth(b){
+  const z=+$('#bzoom').value/100;
+  const avail=$('#boards').clientWidth-24;
+  const base=Math.min(avail, Math.max(240, window.innerHeight*0.62)*(b.w/b.h));
+  return Math.max(120, base*z);
+}
+function renderBoards(){
+  const host=$('#boards'), keep=host.scrollTop;
+  host.innerHTML='';
+  if(!state.boards.length){
+    host.innerHTML='<div class="hint">「ボードを追加」で、投稿したい比率の枠を作ってください。複数の比率を並べて同時に作れます。</div>'; return;
+  }
+  state.boards.forEach((b,bi)=>{
+    const wrap=document.createElement('div'); wrap.className='board';
+    const head=document.createElement('div'); head.className='bhead';
+    const nClip=b.items.filter(i=>i.type==='clip').length, nSh=b.items.length-nClip;
+    head.innerHTML=`<strong style="color:var(--fg)">${ratioLabel(b.w,b.h)}</strong><span>${b.w}×${b.h}px</span><span>${nClip}コマ${nSh?` / 図形${nSh}`:''}</span>`;
+    const bg=document.createElement('input'); bg.type='color'; bg.value=b.bg; bg.title='背景色';
+    bg.onpointerdown=()=>pushHistory();
+    bg.oninput=()=>{ b.bg=bg.value; stage.style.background=b.bg;
+      if(b.items.some(i=>i.type==='brush'&&i.erase)) renderBoards(); };  // 消しゴムの色も追従させる
+    const bTidy=document.createElement('button'); bTidy.className='mini'; bTidy.textContent='自動整列';
+    bTidy.onclick=()=>{ pushHistory(); tidy(b); renderBoards(); };
+    const bClear=document.createElement('button'); bClear.className='mini'; bClear.textContent='中身を空に';
+    bClear.onclick=()=>{ pushHistory(); b.items=[]; state.sel=null; renderBoards(); };
+    const bDel=document.createElement('button'); bDel.className='mini warn'; bDel.textContent='ボード削除';
+    bDel.onclick=()=>{ pushHistory(); state.boards.splice(bi,1); state.sel=null; renderBoards(); };
+    const bExp=document.createElement('button'); bExp.className='mini primary'; bExp.textContent='PNG書き出し';
+    bExp.onclick=()=>exportBoard(b,bi+1,state.boards.length);
+    const sp=document.createElement('span'); sp.className='sp';
+    head.append(bg,bTidy,bClear,sp,bDel,bExp);
+
+    syncAnchors(b);
+    const DW=boardDisplayWidth(b), s=DW/b.w;
+    const stage=document.createElement('div'); stage.className='stage'+(state.tool!=='select'?' draw':'');
+    stage.style.width=DW+'px'; stage.style.height=(b.h*s)+'px'; stage.style.background=b.bg;
+    stage.dataset.bid=b.id;
+
+    if(!b.items.length){ const e=document.createElement('div'); e.className='empty'; e.textContent='ここにクリップをドラッグ'; stage.appendChild(e); }
+
+    let num=0;
+    b.items.forEach((it,ii)=>{
+      const el=document.createElement('div'); el.className='item'+(state.sel&&state.sel.iid===it.id?' sel':'');
+      el.style.zIndex=ii+1;
+      if(it.type==='clip'){
+        const c=clipById(it.clipId); if(!c) return;
+        num++;
+        el.innerHTML=`<img src="${c.thumb}">`+($('#showNum').checked?`<span class="num">${num}</span>`:'');
+      }else if(it.type==='paint'){
+        el.innerHTML=`<img src="${it.src}">`;
+      }
+      el.innerHTML+=['tl','tr','br','bl'].map(p=>`<span class="h ${p}" data-h="${p}"></span>`).join('');
+      updateItemEl(el,it,s,b);
+      bindItem(b,it,el,stage,s);
+      stage.appendChild(el);
+    });
+
+    stage.addEventListener('pointerdown',e=>{
+      if(state.tool!=='select'){ startDraw(e,b,stage,s); return; }
+      if(e.target===stage||e.target.classList.contains('empty')){ state.sel=null; renderBoards(); }
+    });
+    stage.addEventListener('wheel',e=>{
+      if(!(e.altKey||e.metaKey)) return;                 // 通常のスクロールは邪魔しない
+      if(!state.sel||state.sel.bid!==b.id) return;
+      const it=b.items.find(i=>i.id===state.sel.iid); if(!it) return;
+      e.preventDefault(); scaleItem(it, e.deltaY<0?1.06:1/1.06, b); renderBoards();
+    },{passive:false});
+
+    wrap.append(head,stage); host.appendChild(wrap);
+  });
+  host.scrollTop=keep;
+}
+
+/* 線・ブラシは当たり判定が潰れないよう、要素だけ少し大きく描く */
+const NS='http://www.w3.org/2000/svg';
+const PAD=it=>(it.type==='brush'||it.type==='line')?9:0;
+/* 四隅（tl,tr,br,bl）を 0〜1 の割合で持つ。既定は普通の長方形、動かすと斜めゴマになる */
+const DEFQ=[[0,0],[1,0],[1,1],[0,1]];
+const quadOf=it=>it.quad||DEFQ;
+const hasQuad=it=>!!it.quad&&it.quad.some((p,i)=>p[0]!==DEFQ[i][0]||p[1]!==DEFQ[i][1]);
+const quadPts=(it,s)=>{ const p=PAD(it); return quadOf(it).map(([fx,fy])=>[p+fx*it.w*s, p+fy*it.h*s]); };
+const quadCSS=it=>`polygon(${quadOf(it).map(([fx,fy])=>`${fx*100}% ${fy*100}%`).join(',')})`;
+function placeItem(el,it,s){
+  const p=PAD(it);
+  el.style.left=(it.x*s-p)+'px'; el.style.top=(it.y*s-p)+'px';
+  el.style.width=(it.w*s+p*2)+'px'; el.style.height=(it.h*s+p*2)+'px';
+}
+function lineCoords(it,s){
+  const p=PAD(it), w=it.w*s, h=it.h*s;
+  return it.dir==='trbl' ? [p+w,p,p,p+h] : [p,p,p+w,p+h];
+}
+/* 図形はすべてSVGで描く（画面と書き出しで太さを完全に一致させるため） */
+function shapeAttrs(it,s,bg){
+  const W=it.w*s, H=it.h*s, lw=Math.max(1,(it.lw||1)*s), p=PAD(it);
+  if(it.type==='brush')
+    return {tag:'polyline', a:{points:it.pts.map(([fx,fy])=>`${p+fx*W},${p+fy*H}`).join(' '),
+            fill:'none', stroke:(it.erase?bg:it.color), 'stroke-width':lw,
+            'stroke-linecap':'round', 'stroke-linejoin':'round'}};
+  if(it.type==='line'){ const [x1,y1,x2,y2]=lineCoords(it,s);
+    return {tag:'line', a:{x1,y1,x2,y2, stroke:it.color, 'stroke-width':lw, 'stroke-linecap':'round'}}; }
+  // rect（コマ枠）：斜めにした場合は四辺形で描く
+  if(hasQuad(it))
+    return {tag:'polygon', a:{points:quadPts(it,s).map(q=>q.join(',')).join(' '),
+            fill:'none', stroke:it.color, 'stroke-width':lw}};
+  return {tag:'rect', a:{x:lw/2, y:lw/2, width:Math.max(0,W-lw), height:Math.max(0,H-lw),
+                         fill:'none', stroke:it.color, 'stroke-width':lw}};
+}
+/* 要素の見た目をまとめて更新（描画中・ドラッグ中もこれを呼ぶ） */
+function updateItemEl(el,it,s,b){
+  placeItem(el,it,s);
+  if(it.type==='clip'||it.type==='paint'){ const img=el.querySelector('img'); if(img) img.style.clipPath=hasQuad(it)?quadCSS(it):'none'; }
+  else paintShape(el,it,s,b);
+  const pts=quadPts(it,s);
+  el.querySelectorAll('.h').forEach((h,i)=>{
+    const [hx,hy]=pts[i]||[0,0];
+    h.style.left=(hx-6.5)+'px'; h.style.top=(hy-6.5)+'px'; h.style.right='auto'; h.style.bottom='auto';
+  });
+}
+function paintShape(el,it,s,b){
+  let svg=el.querySelector('svg');
+  if(!svg){ svg=document.createElementNS(NS,'svg'); svg.setAttribute('width','100%'); svg.setAttribute('height','100%');
+            el.insertBefore(svg, el.firstChild); }
+  const {tag,a}=shapeAttrs(it,s,b.bg);
+  let sh=svg.firstElementChild;
+  if(!sh||sh.tagName!==tag){ svg.innerHTML=''; sh=document.createElementNS(NS,tag); svg.appendChild(sh); }
+  for(const k in a) sh.setAttribute(k,a[k]);
+}
+
+/* ---- 描画ツール ---- */
+/* ブラシ（なぞって描く／消す） */
+function startBrush(e,b,stage,s,erase){
+  if(e.button!==0) return;
+  e.preventDefault();
+  const r=stage.getBoundingClientRect();
+  const pts=[[(e.clientX-r.left)/s,(e.clientY-r.top)/s]];
+  const color=$('#shColor').value, lw=+$('#shWidth').value;
+  const prev=document.createElement('div'); prev.className='preview';
+  prev.style.cssText+='left:0;top:0;width:100%;height:100%';
+  const svg=document.createElementNS(NS,'svg'); svg.setAttribute('width','100%'); svg.setAttribute('height','100%');
+  const pl=document.createElementNS(NS,'polyline');
+  pl.setAttribute('fill','none'); pl.setAttribute('stroke',erase?b.bg:color);
+  pl.setAttribute('stroke-width',Math.max(1,lw*s));
+  pl.setAttribute('stroke-linecap','round'); pl.setAttribute('stroke-linejoin','round');
+  svg.appendChild(pl); prev.appendChild(svg); stage.appendChild(prev);
+  const paint=()=>pl.setAttribute('points',pts.map(([x,y])=>`${x*s},${y*s}`).join(' '));
+  paint();
+  const move=ev=>{
+    const x=(ev.clientX-r.left)/s, y=(ev.clientY-r.top)/s, last=pts[pts.length-1];
+    if(Math.hypot(x-last[0],y-last[1])<2) return;
+    pts.push([x,y]); paint();
+  };
+  const up=()=>{
+    document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
+    prev.remove();
+    if(pts.length<2){ setTool('select'); return; }
+    pushHistory();
+    const xs=pts.map(p=>p[0]), ys=pts.map(p=>p[1]);
+    const x=Math.min(...xs), y=Math.min(...ys);
+    const w=Math.max(1,Math.max(...xs)-x), h=Math.max(1,Math.max(...ys)-y);
+    const it={id:uid++, type:'brush', x:Math.round(x), y:Math.round(y), w:Math.round(w), h:Math.round(h),
+              color, lw, erase, pts:pts.map(([px,py])=>[(px-x)/w,(py-y)/h])};
+    b.items.push(it); state.sel={bid:b.id,iid:it.id};
+    setTool('select'); renderBoards();
+  };
+  document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+}
+function snapTargets(b){
+  const xs=[0,b.w,b.w/2], ys=[0,b.h,b.h/2];
+  b.items.forEach(o=>{ xs.push(o.x,o.x+o.w); ys.push(o.y,o.y+o.h); });
+  return {xs,ys};
+}
+function snapTo(v,arr,tol){ let best=null,d=tol; arr.forEach(c=>{ const t=Math.abs(v-c); if(t<d){d=t;best=c;} }); return best; }
+function setGuides(stage,s,gx,gy){
+  stage.querySelectorAll('.guide').forEach(g=>g.remove());
+  const add=css=>{ const g=document.createElement('div'); g.className='guide'; g.style.cssText+=css; stage.appendChild(g); };
+  if(gx!=null) add(`left:${gx*s}px;top:0;width:1px;height:100%`);
+  if(gy!=null) add(`top:${gy*s}px;left:0;height:1px;width:100%`);
+}
+function startDraw(e,b,stage,s){
+  if(e.button!==0) return;
+  if(state.tool==='brush') return startBrush(e,b,stage,s,false);
+  if(state.tool==='erase') return startBrush(e,b,stage,s,true);
+  if(state.tool==='bucket') return doBucket(e,b,stage,s);
+
+  /* 四角・線：他のコマの辺／ボードの端・中央にスナップしながら引く */
+  e.preventDefault();
+  const type=state.tool;
+  const r=stage.getBoundingClientRect(), tol=8/s, {xs,ys}=snapTargets(b);
+  let x0=(e.clientX-r.left)/s, y0=(e.clientY-r.top)/s;
+  x0=snapTo(x0,xs,tol)??x0; y0=snapTo(y0,ys,tol)??y0;
+  const prev=document.createElement('div'); prev.className='preview'; stage.appendChild(prev);
+  const pit={type, color:$('#shColor').value, lw:+$('#shWidth').value, x:0,y:0,w:0,h:0,dir:'tlbr'};
+
+  const fix=(x,y,sh)=>{        // Shift＝水平/垂直（四角は正方形）に固定
+    if(!sh) return [x,y];
+    const dx=x-x0, dy=y-y0;
+    if(type==='line') return Math.abs(dx)>=Math.abs(dy) ? [x,y0] : [x0,y];
+    const m=Math.max(Math.abs(dx),Math.abs(dy));
+    return [x0+Math.sign(dx||1)*m, y0+Math.sign(dy||1)*m];
+  };
+  const calc=ev=>{
+    let x=(ev.clientX-r.left)/s, y=(ev.clientY-r.top)/s, gx=null, gy=null;
+    if(!ev.shiftKey){ gx=snapTo(x,xs,tol); gy=snapTo(y,ys,tol); if(gx!=null)x=gx; if(gy!=null)y=gy; }
+    [x,y]=fix(x,y,ev.shiftKey);
+    return {x,y,gx,gy};
+  };
+  const move=ev=>{
+    const {x,y,gx,gy}=calc(ev);
+    setGuides(stage,s,gx,gy);
+    pit.x=Math.min(x,x0); pit.y=Math.min(y,y0); pit.w=Math.abs(x-x0); pit.h=Math.abs(y-y0);
+    pit.dir=((x-x0)*(y-y0)<0?'trbl':'tlbr');
+    placeItem(prev,pit,s); paintShape(prev,pit,s,b);
+  };
+  const up=ev=>{
+    document.removeEventListener('pointermove',move); document.removeEventListener('pointerup',up);
+    prev.remove(); setGuides(stage,s,null,null);
+    const {x,y}=calc(ev);
+    let L=Math.min(x,x0),T=Math.min(y,y0),W=Math.abs(x-x0),H=Math.abs(y-y0);
+    if(W<6&&H<6) return;
+    pushHistory();
+    if(type==='line'){       // ほぼ水平／垂直ならまっすぐにする
+      const tolF=v=>Math.max(8,Math.min(40,v*0.03));
+      if(H<tolF(W)){ T=Math.round(T+H/2); H=0; }
+      else if(W<tolF(H)){ L=Math.round(L+W/2); W=0; }
+    }
+    const it={id:uid++, type, x:Math.round(L), y:Math.round(T),
+              w:Math.round(Math.max(W,type==='line'?0:2)), h:Math.round(Math.max(H,type==='line'?0:2)),
+              color:$('#shColor').value, lw:+$('#shWidth').value,
+              dir:((x-x0)*(y-y0)<0?'trbl':'tlbr')};
+    b.items.push(it); state.sel={bid:b.id,iid:it.id};
+    setTool('select');       // 1つ描いたら選択ツールに戻す
+    renderBoards();
+  };
+  document.addEventListener('pointermove',move); document.addEventListener('pointerup',up);
+  move(e);
+}
+
+/* ---- バケツ塗り ----------------------------------------------------------
+   いま見えているボードを一度canvasに焼いて、クリック地点から色の近い範囲を
+   塗り広げ、その形を透明PNGにしてボードに載せる。元画像は触らない。      */
+function doBucket(e,b,stage,s){
+  e.preventDefault();
+  const r=stage.getBoundingClientRect();
+  const sxB=Math.round((e.clientX-r.left)/s), syB=Math.round((e.clientY-r.top)/s);
+  if(sxB<0||syB<0||sxB>=b.w||syB>=b.h) return;
+
+  // クリックした場所にコマがあれば、そのコマの中だけを塗る（外へ漏れない・コマと一緒に動く）
+  const host=[...b.items].reverse().find(it=>(it.type==='clip'||it.type==='paint')
+      && sxB>=it.x && sxB<it.x+it.w && syB>=it.y && syB<it.y+it.h && insideQuad(it,sxB,syB));
+  const bx0=host?Math.max(0,host.x):0, by0=host?Math.max(0,host.y):0;
+  const bx1=host?Math.min(b.w,host.x+host.w):b.w, by1=host?Math.min(b.h,host.y+host.h):b.h;
+  const W=bx1-bx0, H=by1-by0;
+  if(W<2||H<2) return;
+
+  const src=renderBoardCanvas(b).getContext('2d').getImageData(bx0,by0,W,H).data;
+  const tol=+$('#bkTol').value, gap=+$('#bkGap').value;
+  const sx=sxB-bx0, sy=syB-by0, si=(sy*W+sx)*4;
+  const sr=src[si], sg=src[si+1], sb=src[si+2];
+
+  // 1) クリック地点と色が近い画素
+  let match=new Uint8Array(W*H);
+  for(let p=0,i=0;p<W*H;p++,i+=4){
+    match[p] = (Math.abs(src[i]-sr)+Math.abs(src[i+1]-sg)+Math.abs(src[i+2]-sb))/3 <= tol ? 1:0;
+  }
+  if(host&&hasQuad(host)){    // 斜めゴマは形の外を対象外に
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++)
+      if(!insideQuad(host,bx0+x,by0+y)) match[y*W+x]=0;
+  }
+  // 2) 線の途切れから漏れないように、いったん細らせる
+  const eroded = gap ? shrink(match,W,H,gap) : match;
+  const seedOK = eroded[sy*W+sx];
+  // 3) 塗り広げ
+  let region = flood(seedOK?eroded:match, W, H, sx, sy);
+  // 4) 細らせた分＋アンチエイリアスの縁ぶんだけ太らせる
+  region = grow(region, W, H, (seedOK?gap:0)+1);
+  for(let p=0;p<W*H;p++) if(region[p]&&!match[p]&&!isEdge(src,p,sr,sg,sb,tol)) region[p]=0;
+
+  // 塗った範囲を切り出してPNG化
+  let minx=W,miny=H,maxx=-1,maxy=-1;
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(region[y*W+x]){
+    if(x<minx)minx=x; if(x>maxx)maxx=x; if(y<miny)miny=y; if(y>maxy)maxy=y; }
+  if(maxx<0) return;
+  const cw=maxx-minx+1, ch=maxy-miny+1;
+  const oc=document.createElement('canvas'); oc.width=cw; oc.height=ch;
+  const octx=oc.getContext('2d'); const out=octx.createImageData(cw,ch);
+  const col=hex2rgb($('#shColor').value);
+  for(let y=0;y<ch;y++) for(let x=0;x<cw;x++){
+    if(!region[(y+miny)*W+(x+minx)]) continue;
+    const o=(y*cw+x)*4; out.data[o]=col[0]; out.data[o+1]=col[1]; out.data[o+2]=col[2]; out.data[o+3]=255;
+  }
+  octx.putImageData(out,0,0);
+
+  pushHistory();
+  const it={id:uid++, type:'paint', src:oc.toDataURL('image/png'),
+            x:bx0+minx, y:by0+miny, w:cw, h:ch};
+  it.img=new Image(); it.img.src=it.src;
+  if(host){   // コマに紐づけて、コマを動かしたら塗りもついてくるようにする
+    it.anchorId=host.id;
+    it.ax=(it.x-host.x)/host.w; it.ay=(it.y-host.y)/host.h;
+    it.aw=it.w/host.w; it.ah=it.h/host.h;
+  }
+  b.items.push(it); state.sel={bid:b.id,iid:it.id};
+  setTool('select'); renderBoards();
+}
+const hex2rgb=h=>[1,3,5].map(i=>parseInt(h.substr(i,2),16));
+/* 紐づけたコマが動いたら、塗りもついていく */
+function syncAnchors(b){
+  b.items.forEach(it=>{
+    if(it.type!=='paint'||!it.anchorId) return;
+    const a=b.items.find(x=>x.id===it.anchorId);
+    if(!a){ delete it.anchorId; return; }          // コマが消えたらその場に取り残す
+    it.x=Math.round(a.x+it.ax*a.w); it.y=Math.round(a.y+it.ay*a.h);
+    it.w=Math.max(1,Math.round(it.aw*a.w)); it.h=Math.max(1,Math.round(it.ah*a.h));
+  });
+}
+function insideQuad(it,px,py){
+  if(!hasQuad(it)) return true;
+  const q=quadOf(it).map(([fx,fy])=>[it.x+fx*it.w, it.y+fy*it.h]);
+  let inside=false;
+  for(let i=0,j=3;i<4;j=i++){
+    const [xi,yi]=q[i],[xj,yj]=q[j];
+    if((yi>py)!==(yj>py) && px < (xj-xi)*(py-yi)/((yj-yi)||1e-9)+xi) inside=!inside;
+  }
+  return inside;
+}
+/* 走査線フラッドフィル */
+function flood(mask,W,H,sx,sy){
+  const out=new Uint8Array(W*H);
+  if(!mask[sy*W+sx]) return out;
+  const st=[[sx,sy]];
+  while(st.length){
+    let [x,y]=st.pop();
+    let xl=x; while(xl>0 && mask[y*W+xl-1] && !out[y*W+xl-1]) xl--;
+    let xr=x; while(xr<W-1 && mask[y*W+xr+1] && !out[y*W+xr+1]) xr++;
+    for(let i=xl;i<=xr;i++){
+      out[y*W+i]=1;
+      if(y>0     && mask[(y-1)*W+i] && !out[(y-1)*W+i]) st.push([i,y-1]);
+      if(y<H-1   && mask[(y+1)*W+i] && !out[(y+1)*W+i]) st.push([i,y+1]);
+    }
+  }
+  return out;
+}
+/* 4近傍の膨張・収縮（半径ぶん繰り返す） */
+function morph(src,W,H,n,dilate){
+  let a=src, b2=new Uint8Array(W*H);
+  for(let k=0;k<n;k++){
+    for(let y=0;y<H;y++) for(let x=0;x<W;x++){
+      const p=y*W+x; let v=a[p];
+      if(dilate ? !v : v){
+        const l=x>0?a[p-1]:(dilate?0:1), rr=x<W-1?a[p+1]:(dilate?0:1);
+        const u=y>0?a[p-W]:(dilate?0:1), d=y<H-1?a[p+W]:(dilate?0:1);
+        v = dilate ? (l|rr|u|d) : (l&rr&u&d&v);
+      }
+      b2[p]=v;
+    }
+    const t=a; a=b2; b2=(t===src)?new Uint8Array(W*H):t;
+  }
+  return a===src ? src.slice() : a;
+}
+const grow  =(m,W,H,n)=>n>0?morph(m,W,H,n,true):m;
+const shrink=(m,W,H,n)=>n>0?morph(m,W,H,n,false):m;
+/* アンチエイリアスの縁（線と塗りの中間色）かどうか */
+function isEdge(src,p,sr,sg,sb,tol){
+  const i=p*4, d=(Math.abs(src[i]-sr)+Math.abs(src[i+1]-sg)+Math.abs(src[i+2]-sb))/3;
+  return d <= tol*3.5;
+}
+
+/* ---- コマ／図形の操作 ---- */
+function bindItem(b,it,el,stage,s){
+  el.addEventListener('pointerdown',e=>{
+    if(e.button!==0) return;
+    if(state.tool!=='select') return;           // 描画中は図形の上からも描ける
+    e.stopPropagation();
+    state.sel={bid:b.id,iid:it.id};
+    const handle=e.target.dataset.h;
+    const sx=e.clientX, sy=e.clientY, o={x:it.x,y:it.y,w:it.w,h:it.h};
+    const canQuad = it.type==='clip' || it.type==='paint' || it.type==='rect';
+    const corner = handle && canQuad && (e.metaKey||e.ctrlKey) ? {tl:0,tr:1,br:2,bl:3}[handle] : null;
+    const q0 = quadOf(it).map(p=>p.slice());
+    el.setPointerCapture(e.pointerId);
+    document.querySelectorAll('.item').forEach(n=>n.classList.remove('sel'));
+    el.classList.add('sel');
+    let pushed=false;
+    const move=ev=>{
+      if(!pushed){                                     // 実際に動かしたときだけ履歴に積む
+        pushHistory(); pushed=true;
+        if(it.type==='paint' && it.anchorId && !handle) delete it.anchorId;  // 手で動かしたらコマから切り離す
+      }
+      const dx=(ev.clientX-sx)/s, dy=(ev.clientY-sy)/s;
+      if(corner!=null){                            // ⌘+角ドラッグ＝その角だけ動かす（斜めゴマ）
+        const q=q0.map(p=>p.slice());
+        q[corner]=[clamp(q0[corner][0]+dx/Math.max(1,it.w),0,1),
+                   clamp(q0[corner][1]+dy/Math.max(1,it.h),0,1)];
+        it.quad=q;
+      }else if(handle){
+        if(it.type==='clip'){                    // コマは縦横比を保つ
+          const ar=o.w/o.h;
+          let nw = handle==='br'||handle==='tr' ? o.w+dx : o.w-dx;
+          nw=Math.max(20,nw); const nh=nw/ar;
+          it.x = (handle==='bl'||handle==='tl') ? o.x+(o.w-nw) : o.x;
+          it.y = (handle==='tr'||handle==='tl') ? o.y+(o.h-nh) : o.y;
+          it.w=nw; it.h=nh;
+        }else{
+          const n=applyHandle(o,handle,dx,dy,4); it.x=n.x; it.y=n.y; it.w=n.w; it.h=n.h;
+        }
+      }else{
+        it.x=o.x+dx; it.y=o.y+dy;
+        const snap=8/s, cand=[];
+        cand.push({v:0,t:'x'},{v:b.w-it.w,t:'x'},{v:(b.w-it.w)/2,t:'x'});
+        cand.push({v:0,t:'y'},{v:b.h-it.h,t:'y'},{v:(b.h-it.h)/2,t:'y'});
+        b.items.forEach(other=>{ if(other===it) return;
+          cand.push({v:other.x,t:'x'},{v:other.x+other.w-it.w,t:'x'},{v:other.x+other.w,t:'x'},{v:other.x-it.w,t:'x'});
+          cand.push({v:other.y,t:'y'},{v:other.y+other.h-it.h,t:'y'},{v:other.y+other.h,t:'y'},{v:other.y-it.h,t:'y'});
+        });
+        cand.forEach(c=>{ if(c.t==='x'&&Math.abs(it.x-c.v)<snap) it.x=c.v;
+                          if(c.t==='y'&&Math.abs(it.y-c.v)<snap) it.y=c.v; });
+      }
+      updateItemEl(el,it,s,b);
+    };
+    const up=()=>{
+      el.removeEventListener('pointermove',move); el.removeEventListener('pointerup',up);
+      ['x','y','w','h'].forEach(k=>it[k]=Math.round(it[k]));
+      renderBoards();
+    };
+    el.addEventListener('pointermove',move); el.addEventListener('pointerup',up);
+  });
+  el.querySelectorAll('.h').forEach(h=>h.addEventListener('dblclick',ev=>{   // 角を元に戻す
+    ev.stopPropagation(); pushHistory();
+    const i={tl:0,tr:1,br:2,bl:3}[h.dataset.h];
+    const q=quadOf(it).map(p=>p.slice()); q[i]=DEFQ[i].slice();
+    it.quad = q.some((p,j)=>p[0]!==DEFQ[j][0]||p[1]!==DEFQ[j][1]) ? q : null;
+    renderBoards();
+  }));
+  el.addEventListener('dblclick',()=>{
+    if(state.tool!=='select') return;
+    pushHistory();
+    const ar=it.w/it.h; it.w=b.w; it.h=Math.round(b.w/ar); it.x=0;
+    it.y=Math.round(clamp(it.y,0,Math.max(0,b.h-it.h))); renderBoards();
+  });
+}
+function scaleItem(it,f,b){
+  const nw=clamp(it.w*f,4,b.w*6), nh=it.h*(nw/it.w);
+  it.x=Math.round(it.x-(nw-it.w)/2); it.y=Math.round(it.y-(nh-it.h)/2);
+  it.w=Math.round(nw); it.h=Math.round(nh);
+}
+document.addEventListener('keydown',e=>{
+  if(!state.sel) return;
+  if(/^(INPUT|SELECT|TEXTAREA)$/.test(document.activeElement.tagName)) return;
+  const b=state.boards.find(x=>x.id===state.sel.bid); if(!b) return;
+  const i=b.items.findIndex(x=>x.id===state.sel.iid); if(i<0) return;
+  const it=b.items[i], step=e.shiftKey?20:4;
+  const dup=(e.key==='d'||e.key==='D')&&(e.metaKey||e.ctrlKey);
+  if(!dup && !['Backspace','Delete','ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=',';','-',']','['].includes(e.key)) return;
+  pushHistory();
+  if(e.key==='Backspace'||e.key==='Delete'){ b.items.splice(i,1); state.sel=null; }
+  else if(e.key==='ArrowLeft') it.x-=step; else if(e.key==='ArrowRight') it.x+=step;
+  else if(e.key==='ArrowUp') it.y-=step; else if(e.key==='ArrowDown') it.y+=step;
+  else if(e.key==='+'||e.key==='='||e.key===';') scaleItem(it,1.08,b);
+  else if(e.key==='-') scaleItem(it,1/1.08,b);
+  else if(e.key===']'){ b.items.splice(i,1); b.items.push(it); }
+  else if(e.key==='['){ b.items.splice(i,1); b.items.unshift(it); }
+  else if(dup){ const n={...it,id:uid++,x:it.x+20,y:it.y+20};
+    delete n.anchorId; b.items.push(n); state.sel={bid:b.id,iid:n.id}; }
+  e.preventDefault(); renderBoards();
+});
+
+/* ---- 自動整列（コマだけを置いた順に行組み） ---- */
+function tidy(b){
+  const items=b.items.filter(i=>i.type==='clip'); const n=items.length; if(!n) return;
+  const pad=Math.round(b.w*0.025), gap=Math.round(b.w*0.015);
+  const innerW=b.w-pad*2, innerH=b.h-pad*2;
+  const ar=items.map(it=>it.w/it.h), gapF=gap/innerW, maxPerRow=Math.min(4,n);
+  let best=null, budget=200000; const cur=[];
+  (function rec(i){
+    if(budget--<0) return;
+    if(i===n){
+      let ok=true;
+      const hs=cur.map(row=>{ const k=row.length, sum=row.reduce((s,j)=>s+ar[j],0);
+        const av=1-gapF*(k-1); if(av<=0.1){ok=false;return 0;} return av/sum; });
+      if(!ok) return;
+      const H=hs.reduce((a,c)=>a+c,0)+gapF*(cur.length-1);
+      const target=innerH/innerW, mean=hs.reduce((a,c)=>a+c,0)/hs.length;
+      const varp=hs.reduce((a,c)=>a+Math.abs(c-mean),0)/hs.length;
+      const score=Math.abs(H-target)/target+varp*0.25;
+      if(!best||score<best.score) best={score,rows:cur.map(r=>r.slice()),H};
+      return;
+    }
+    for(let k=1;k<=Math.min(maxPerRow,n-i);k++){ cur.push(Array.from({length:k},(_,t)=>i+t)); rec(i+k); cur.pop(); }
+  })(0);
+  if(!best) return;
+  const scale=Math.min(innerW, innerH/best.H), totalH=best.H*scale;
+  let oy=pad+(innerH-totalH)/2; const ox0=pad+(innerW-scale)/2;
+  best.rows.forEach(row=>{
+    const k=row.length, sum=row.reduce((s,j)=>s+ar[j],0);
+    const rowH=((1-gapF*(k-1))/sum)*scale;
+    let ox=ox0;
+    row.forEach(j=>{ const it=items[j], w=rowH*ar[j];
+      it.x=Math.round(ox); it.y=Math.round(oy); it.w=Math.round(w); it.h=Math.round(rowH); ox+=w+gap; });
+    oy+=rowH+gap;
+  });
+}
+
+/* ============ 書き出し ============ */
+function renderBoardCanvas(b){
+  const c=document.createElement('canvas'); c.width=b.w; c.height=b.h;
+  const x=c.getContext('2d');
+  x.fillStyle=b.bg; x.fillRect(0,0,b.w,b.h);
+  x.imageSmoothingQuality='high';
+  const quadPath=it=>{ x.beginPath();
+    quadOf(it).forEach(([fx,fy],i)=>{ const px=it.x+fx*it.w, py=it.y+fy*it.h;
+      i?x.lineTo(px,py):x.moveTo(px,py); });
+    x.closePath(); };
+  b.items.forEach(it=>{
+    if(it.type==='clip'){
+      const cl=clipById(it.clipId); if(!cl) return;
+      const pg=pageById(cl.pageId); if(!pg) return;
+      x.save();
+      if(hasQuad(it)){ quadPath(it); x.clip(); }      // 斜めゴマ＝画像を四辺形で切り抜く
+      x.drawImage(pg.img, cl.sx,cl.sy,cl.sw,cl.sh, it.x,it.y,it.w,it.h);
+      x.restore();
+    }else if(it.type==='paint'){
+      if(!it.img||!it.img.complete) return;
+      x.save();
+      if(hasQuad(it)){ quadPath(it); x.clip(); }
+      x.drawImage(it.img, it.x, it.y, it.w, it.h);
+      x.restore();
+    }else if(it.type==='rect'){
+      x.strokeStyle=it.color; x.lineWidth=it.lw; x.lineJoin='miter';
+      if(hasQuad(it)){ quadPath(it); x.stroke(); }
+      else x.strokeRect(it.x+it.lw/2, it.y+it.lw/2, Math.max(1,it.w-it.lw), Math.max(1,it.h-it.lw));
+    }else if(it.type==='line'){
+      x.strokeStyle=it.color; x.lineWidth=it.lw; x.lineCap='round';
+      x.beginPath();
+      if(it.dir==='trbl'){ x.moveTo(it.x+it.w,it.y); x.lineTo(it.x,it.y+it.h); }
+      else { x.moveTo(it.x,it.y); x.lineTo(it.x+it.w,it.y+it.h); }
+      x.stroke();
+    }else if(it.type==='brush'){
+      x.strokeStyle = it.erase ? b.bg : it.color;
+      x.lineWidth=it.lw; x.lineCap='round'; x.lineJoin='round';
+      x.beginPath();
+      it.pts.forEach(([fx,fy],i)=>{ const px=it.x+fx*it.w, py=it.y+fy*it.h;
+        i?x.lineTo(px,py):x.moveTo(px,py); });
+      x.stroke();
+    }
+  });
+  return c;
+}
+function exportName(n,total){
+  const base=($('#fileName').value||'').replace(/[\\/:*?"<>|]/g,'_').trim() || 'manga';
+  return total>1 ? `${base}_${String(n).padStart(2,'0')}.jpg` : `${base}.jpg`;
+}
+const toJpeg=b=>new Promise(r=>renderBoardCanvas(b).toBlob(r,'image/jpeg',0.92));
+/* 保存場所とファイル名をOSのダイアログで選ぶ。非対応ブラウザ（Safari等）は通常のダウンロード */
+async function saveBlob(blob,name){
+  if(window.showSaveFilePicker){
+    try{
+      const h=await showSaveFilePicker({suggestedName:name,
+        types:[{description:'JPEG画像',accept:{'image/jpeg':['.jpg','.jpeg']}}]});
+      const w=await h.createWritable(); await w.write(blob); await w.close();
+      return 'saved';
+    }catch(err){
+      if(err.name==='AbortError') return 'cancelled';        // ユーザーが閉じた
+      /* それ以外は下のダウンロードにフォールバック */
+    }
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
+  a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  return 'saved';
+}
+async function exportBoard(b,n,total){
+  if(!b.items.length){ alert('このボードは空です'); return; }
+  await saveBlob(await toJpeg(b), exportName(n,total));
+}
+$('#btnExportAll').onclick=async ()=>{
+  const bs=state.boards.filter(b=>b.items.length);
+  if(!bs.length){ alert('中身のあるボードがありません'); return; }
+  if(bs.length===1) return exportBoard(bs[0],1,1);
+  let dir=null;
+  if(window.showDirectoryPicker){          // 複数枚は保存先フォルダを一度だけ選ぶ
+    try{ dir=await showDirectoryPicker({mode:'readwrite'}); }
+    catch(err){ if(err.name==='AbortError') return; }
+  }
+  for(let i=0;i<bs.length;i++){
+    const blob=await toJpeg(bs[i]), name=exportName(i+1,bs.length);
+    if(dir){
+      const fh=await dir.getFileHandle(name,{create:true});
+      const w=await fh.createWritable(); await w.write(blob); await w.close();
+    }else{
+      if(await saveBlob(blob,name)==='cancelled') return;
+      await new Promise(r=>setTimeout(r,250));
+    }
+  }
+};
+
+/* ============ 共通 ============ */
+function clamp(v,a,b){ return Math.max(a,Math.min(b,v)); }
+function esc(s){ return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function renderAll(){ renderPages(); renderTray(); renderBoards(); }
+
+state.boards.push({id:uid++, w:1080, h:1350, bg:'#ffffff', items:[]});
+renderAll(); updateHistUI();
+</script>
+</body>
+</html>
