@@ -82,6 +82,25 @@
   .item .txt.v{writing-mode:vertical-rl}
   .item .txt[contenteditable="true"]{outline:2px dashed var(--accent);background:rgba(76,141,255,.06);cursor:text}
   .item .num{position:absolute;top:2px;left:3px;font-size:12px;font-weight:700;color:#fff;background:rgba(0,0,0,.6);border-radius:3px;padding:0 4px;pointer-events:none}
+  /* 操作ヘルプ（畳める） */
+  #help{border-bottom:1px solid var(--line);background:var(--panel);font-size:12px}
+  #help summary{cursor:pointer;padding:6px 12px;color:var(--muted);user-select:none;list-style:none;display:flex;align-items:center;gap:6px}
+  #help summary::-webkit-details-marker{display:none}
+  #help summary::before{content:'▶';font-size:9px;transition:transform .15s}
+  #help[open] summary::before{transform:rotate(90deg)}
+  #help summary:hover{color:var(--fg)}
+  .helpBody{padding:2px 12px 12px;display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:10px 22px}
+  .helpBody h4{margin:0 0 4px;font-size:11px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+  .helpBody dl{margin:0;display:grid;grid-template-columns:max-content 1fr;gap:5px 10px;align-items:baseline}
+  .helpBody dl > div{display:contents}
+  .helpBody .k{justify-self:start;white-space:nowrap}
+  .helpBody dl > div > span:not(.k){color:var(--muted);line-height:1.45}
+  .helpBody dl > div > span.note{grid-column:1/-1;color:#8b93a3;font-size:11px;padding-top:1px}
+  .helpBody kbd{display:inline-block;background:#2c3140;border:1px solid #454c5e;border-bottom-width:2px;
+    border-radius:4px;padding:0 5px;font:600 11px/17px ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--fg);white-space:nowrap}
+  .helpBody kbd + kbd{margin-left:3px}
+  .helpBody dl > div > span kbd{margin:0 1px}
+
   .guide{position:absolute;background:#ff4d8d;z-index:9998;pointer-events:none}
   .preview{position:absolute;z-index:9999;pointer-events:none}
   .preview svg{position:absolute;inset:0;overflow:visible}
@@ -181,9 +200,49 @@
       <span style="color:var(--muted)">.jpg</span>
       <button id="btnExportAll" class="primary mini">全ボードを書き出し</button>
     </div>
-    <div class="colhead" style="border-top:none;padding-top:0">
-      <span>コマ／図形：ドラッグで移動・角の●で拡大縮小・⌘+角ドラッグでその角だけ動かして斜めゴマに（角をダブルクリックで戻す）・Option+ホイールか +− で拡大縮小・ダブルクリックで幅いっぱい・Delete で削除・[ ] で重なり順／四角・線は他のコマの辺に自動スナップ（ピンクの線）、Shift で水平垂直（正方形）に固定／バケツは塗りたい場所をクリック（漏れるときは「隙間を閉じる」を強く）／テキストはクリックかドラッグで枠を作って入力、ダブルクリックで書き換え、枠外クリックで確定（空のままだと消えます）</span>
-    </div>
+    <details id="help">
+      <summary>操作ヘルプ</summary>
+      <div class="helpBody">
+        <section>
+          <h4>コマ・図形の操作</h4>
+          <dl>
+            <div><span class="k"><kbd>ドラッグ</kbd></span><span>移動（他のコマの辺・ボードの端／中央に吸着）</span></div>
+            <div><span class="k"><kbd>角の●をドラッグ</kbd></span><span>拡大縮小</span></div>
+            <div><span class="k"><kbd>⌘</kbd><kbd>角をドラッグ</kbd></span><span>その角だけ動かす＝斜めゴマ（角をダブルクリックで戻す）</span></div>
+            <div><span class="k"><kbd>⌥</kbd><kbd>ホイール</kbd></span><span>拡大縮小（<kbd>+</kbd><kbd>−</kbd>キーでも可）</span></div>
+            <div><span class="k"><kbd>ダブルクリック</kbd></span><span>ボードの幅いっぱいに広げる</span></div>
+            <div><span class="k"><kbd>Delete</kbd></span><span>削除</span></div>
+            <div><span class="k"><kbd>[</kbd><kbd>]</kbd></span><span>重なり順を後ろへ／前へ</span></div>
+            <div><span class="k"><kbd>⌘Z</kbd><kbd>⌘⇧Z</kbd></span><span>戻す／やり直し</span></div>
+          </dl>
+        </section>
+        <section>
+          <h4>四角・線</h4>
+          <dl>
+            <div><span class="k"><kbd>ドラッグ</kbd></span><span>描く。他のコマの辺に自動スナップ（ピンクの線が目印）</span></div>
+            <div><span class="k"><kbd>Shift</kbd></span><span>水平・垂直に固定（四角は正方形）</span></div>
+            <div><span class="note">線はほぼ水平・垂直なら自動でまっすぐに整えます</span></div>
+          </dl>
+        </section>
+        <section>
+          <h4>ブラシ・消しゴム・バケツ</h4>
+          <dl>
+            <div><span class="k"><kbd>ドラッグ</kbd></span><span>ブラシ／消しゴムでなぞる（消しゴムは背景色で塗ります）</span></div>
+            <div><span class="k"><kbd>クリック</kbd></span><span>バケツ。囲みの中を塗りつぶす</span></div>
+            <div><span class="note">塗りが外へ漏れるときは「隙間を閉じる」を強く。塗りはクリックしたコマに追従します</span></div>
+          </dl>
+        </section>
+        <section>
+          <h4>テキスト</h4>
+          <dl>
+            <div><span class="k"><kbd>クリック</kbd></span><span>既定サイズの枠を作って入力</span></div>
+            <div><span class="k"><kbd>ドラッグ</kbd></span><span>大きさを決めて枠を作る</span></div>
+            <div><span class="k"><kbd>ダブルクリック</kbd></span><span>書き換え</span></div>
+            <div><span class="k"><kbd>枠の外をクリック</kbd></span><span>確定（空のままだと枠は消えます）</span></div>
+          </dl>
+        </section>
+      </div>
+    </details>
     <div class="colbody" id="boards"></div>
   </div>
 </div>
@@ -504,6 +563,12 @@ $('#btnAddBoard').onclick=()=>{
   state.boards.push({id:uid++, w, h, bg:'#ffffff', items:[]});
   renderBoards();
 };
+/* ヘルプの開閉は次回も引き継ぐ（既定は畳んだ状態） */
+(function initHelp(){
+  const d=$('#help');
+  try{ if(localStorage.getItem('mangaHelpOpen')==='1') d.open=true; }catch(e){}
+  d.addEventListener('toggle',()=>{ try{ localStorage.setItem('mangaHelpOpen', d.open?'1':'0'); }catch(e){} });
+})();
 function setTool(t){
   state.tool=t;
   document.querySelectorAll('[data-tool]').forEach(x=>x.classList.toggle('on',x.dataset.tool===t));
